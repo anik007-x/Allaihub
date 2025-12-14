@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AI Hub</title>
+<style>
+  :root{--bg:#0d0d0f;--card:#141417;--muted:#bdbdbd;--accent:#00d6a5;--btn:#2f6df6}
+  *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  body{margin:0;background:var(--bg);color:#fff}
+  .wrap{max-width:980px;margin:12px auto;padding:12px}
+  header{display:flex;justify-content:space-between;align-items:center;padding:12px 0}
+  header h1{font-size:20px;color:var(--accent);margin:0}
+  .controls{display:flex;gap:8px;align-items:center}
+  .search{flex:1;padding:10px;border-radius:10px;border:none;background:rgba(255,255,255,0.03);color:inherit}
+  .cats{display:flex;gap:8px;overflow:auto;padding:10px 0;margin-bottom:10px}
+  .cat{padding:8px 12px;border-radius:999px;background:rgba(255,255,255,0.02);cursor:pointer;white-space:nowrap;color:var(--muted)}
+  .cat.active{background:linear-gradient(90deg,#083b32,#0b5b46);color:#fff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .card{background:var(--card);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,0.03);transition:transform .18s}
+  .card:hover{transform:translateY(-6px)}
+  .card .meta{font-size:12px;color:var(--accent);font-weight:700;margin-bottom:8px}
+  .card h3{margin:0 0 8px;font-size:16px}
+  .card p{margin:0;color:var(--muted);font-size:14px;min-height:40px}
+  .card a.open{display:inline-block;margin-top:10px;padding:8px 10px;background:var(--btn);color:#fff;border-radius:8px;text-decoration:none}
+  .empty{padding:20px;text-align:center;color:var(--muted)}
+  footer{text-align:center;padding:14px;color:var(--muted);font-size:13px;margin-top:12px}
+  @media(max-width:420px){header h1{font-size:18px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🔥 AI Hub</h1>
+    <div class="controls">
+      <input id="q" class="search" placeholder="Search tools (name, description) — e.g. 'chat'">
+      <button id="openPanel" style="padding:8px 10px;border-radius:8px;border:none;background:#333;color:#fff;cursor:pointer">Open Admin</button>
+    </div>
+  </header>
+
+  <div class="cats" id="catsContainer"></div>
+
+  <div id="grid" class="grid"></div>
+
+  <footer>Keep admin file (panel.html) private. Tools are stored only in your browser (localStorage).</footer>
+</div>
+
+<script>
+/* ---- STORAGE KEYS ---- */
+const STORAGE_KEY = 'ai_tools_v2';
+const CATS_KEY = 'ai_categories_v2';
+
+/* ---- Default category emojis (option 1 — emojis) ---- */
+const DEFAULT_CATS = [
+  {id:'Chat', emoji:'💬'},
+  {id:'Image', emoji:'🖼️'},
+  {id:'Video', emoji:'🎬'},
+  {id:'Coding', emoji:'💻'},
+  {id:'SEO', emoji:'📈'}
+];
+
+/* ---- Helpers ---- */
+function readTools(){ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+function readCats(){ return JSON.parse(localStorage.getItem(CATS_KEY) || 'null') || DEFAULT_CATS; }
+
+/* ---- UI state ---- */
+let currentCat = 'All';
+const grid = document.getElementById('grid');
+const catsContainer = document.getElementById('catsContainer');
+const qInput = document.getElementById('q');
+
+/* ---- Render categories (with emojis) ---- */
+function renderCats(){
+  const cats = readCats();
+  catsContainer.innerHTML = '';
+  const allBtn = document.createElement('div');
+  allBtn.className = 'cat active'; allBtn.textContent = '📦 All'; allBtn.dataset.cat='All';
+  allBtn.onclick = ()=>{ selectCat('All'); };
+  catsContainer.appendChild(allBtn);
+  cats.forEach(c=>{
+    const d = document.createElement('div');
+    d.className = 'cat';
+    d.innerHTML = `${c.emoji} ${c.id}`;
+    d.dataset.cat = c.id;
+    d.onclick = ()=> selectCat(c.id);
+    catsContainer.appendChild(d);
+  });
+}
+
+/* ---- Select category ---- */
+function selectCat(cat){
+  currentCat = cat;
+  document.querySelectorAll('.cat').forEach(el => el.classList.toggle('active', el.dataset.cat === cat));
+  renderGrid();
+}
+
+/* ---- Render grid ---- */
+function renderGrid(){
+  const q = (qInput.value || '').toLowerCase().trim();
+  const tools = readTools();
+  let list = tools.filter(t=>{
+    if(currentCat !== 'All' && t.category !== currentCat) return false;
+    if(!q) return true;
+    return (t.name + ' ' + t.desc + ' ' + t.category).toLowerCase().includes(q);
+  });
+
+  grid.innerHTML = '';
+  if(list.length === 0){
+    grid.innerHTML = '<div class="empty">No tools yet. Add via <strong>panel.html</strong>.</div>';
+    return;
+  }
+
+  for(const t of list){
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `
+      <div class="meta">${getEmojiForCat(t.category)} ${escapeHtml(t.category)}</div>
+      <h3>${escapeHtml(t.name)}</h3>
+      <p>${escapeHtml(t.desc)}</p>
+      <a class="open" href="${escapeAttr(t.link)}" target="_blank" rel="noopener noreferrer">Open</a>
+    `;
+    grid.appendChild(div);
+  }
+}
+
+/* ---- Emoji helper ---- */
+function getEmojiForCat(cat){
+  const cats = readCats();
+  const found = cats.find(c => c.id === cat);
+  return found ? found.emoji : '📦';
+}
+
+/* ---- Escape helpers ---- */
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function escapeAttr(s){ return String(s||'').replace(/"/g,'&quot;'); }
+
+/* ---- Open admin (simple: opens panel.html in same folder) ---- */
+document.getElementById('openPanel').addEventListener('click', ()=> {
+  window.open('panel.html', '_blank');
+});
+
+/* ---- events ---- */
+qInput.addEventListener('input', renderGrid);
+
+/* ---- init ---- */
+renderCats();
+renderGrid();
+
+/* Also re-render if localStorage changes in another tab/window */
+window.addEventListener('storage', (e)=>{
+  if(e.key === STORAGE_KEY || e.key === CATS_KEY) { renderCats(); renderGrid(); }
+});
+</script>
+</body>
+</html>
